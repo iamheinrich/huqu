@@ -210,17 +210,18 @@ def main():
     # TODO: Load the dataset automatically from data derived by website extraction or the information available from datasets library
     
     # Load the CLIP model
-    model, processor = load_clip_model()
+    # model, processor = load_clip_model()
     
     # Get dataset information
     dataset_info = get_dataset_information("rishitdagli/cppe-5")
+    print(dataset_info)
     # TODO: Determine if the dataset contains vulnerable attributes.
     
     # TODO: To start with, we can check if the dataset contains human. 
     # If so, we can create tags to classify the humans into protected groups such as gender, ethnicity, age, weight.
     
     # Tag the images
-    tag_images(dataset, model, processor)
+    # tag_images(dataset, model, processor)
     
     # TODO: Evaluate the distribution of the tags
 
