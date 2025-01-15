@@ -3,6 +3,13 @@ from transformers import CLIPModel, CLIPProcessor
 from PIL import Image
 import torch  # Added to handle tensor operations
 import matplotlib.pyplot as plt
+from collections import Counter
+from matplotlib import pyplot as plt
+from cleanvision import Imagelab
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+import pandas as pd
+
 
 prompts = {
     "gender": {
@@ -162,68 +169,140 @@ def tag_images(dataset, model, processor, split="test"):
         dataset (Dataset): The dataset containing images.
         model (CLIPModel): The CLIP model.
         processor (CLIPProcessor): The CLIP processor.
+    Returns:
+        dict: A dictionary where keys are attributes and values are lists of predicted tags.
     """
+
     protected_attributes = ["gender", "ethnicity", "age", "weight"]
+
+    while True:
+        try:
+            input_attributes = input(f"Enter one or more of the following attributes {protected_attributes} you would like to analyze (comma-separated): ").split(",")
+            selected_attributes = [attribute.strip() for attribute in input_attributes]
     
-    # TODO: Let the user choose the protected attributes to tag the images.
-    print("Tagging images")
+            # check if input attributes are part of protected attributes
+            valid_attributes = [attribute for attribute in selected_attributes if attribute in protected_attributes]
+            if not valid_attributes:
+                # currently raised only when all input attributes are not in protected attr
+                raise ValueError("No valid attributes selected. Please try again.")
+            
+            print(f"Tagging images with selected attributes: {valid_attributes}")
+            break
+
+        except ValueError as e:
+            print(e) 
+
+    # Create dict where keys are attributes and values are lists of predicted tags 
+    predicted_tags = {attribute: [] for attribute in valid_attributes}
+
     for image_data in dataset[split]: 
         image = image_data["image"]
-        
-        gender_prompts_single_gender = prompts["gender"]["single_gender"]
-        gender_prompts_multiple_one_gender = prompts["gender"]["multiple_one_gender"]
-        gender_prompts_mixed_genders = prompts["gender"]["mixed_genders"]
-        gender_prompts_proportions = prompts["gender"]["proportions"]
-        gender_prompts_neutral_uncertain = prompts["gender"]["neutral_uncertain"]
-        
-        gender_prompts = gender_prompts_single_gender + gender_prompts_multiple_one_gender + gender_prompts_mixed_genders + gender_prompts_proportions + gender_prompts_neutral_uncertain
-        
-        # Determine probabilities of the protected attributes
-        inputs = processor(text=gender_prompts, images=image, return_tensors="pt", padding=True)
-        outputs = model(**inputs)
-        probs = outputs.logits_per_image.softmax(dim=1).detach().numpy()[0]
-        print("Detached probs", probs)
-        
-        # Get the index of the highest probability
-        max_prob = probs.max()
-        max_idx = probs.argmax()
-        predicted_tag = gender_prompts[max_idx]
-        
-        # Plot the image and predicted tag
-        fig, ax = plt.subplots(figsize=(8, 8))
-        
-        # Display the image
-        ax.imshow(image)
-        ax.axis('off')
-        ax.set_title(f'Predicted tag: {predicted_tag} (Probability: {max_prob:.4f})', fontsize=24, fontweight='bold')
-        
+
+        for attribute in valid_attributes:
+            attribute_prompts = [prompt for category in prompts[attribute].values() for prompt in category]
+            inputs = processor(text=attribute_prompts, images=image, return_tensors="pt", padding=True)
+            outputs = model(**inputs)
+            probs = outputs.logits_per_image.softmax(dim=1).detach().numpy()[0]
+
+            max_idx = probs.argmax()
+            predicted_tag = attribute_prompts[max_idx]
+            
+            # Add predictions to dict
+            predicted_tags[attribute].append(predicted_tag)
+
+    print("Images tagged successfully.")
+    return predicted_tags
+
+    # print("Probabilities for each prompt:")
+    # for prompt, prob in zip(gender_prompts, probs):
+    #     print(f"Prompt: '{prompt}' - Probability: {prob:.4f}")
+    # print("Detached probs", probs)
+    
+    # Plot the image and predicted tag
+    #fig, ax = plt.subplots(figsize=(8, 8))
+    
+    # Display the image
+    #ax.imshow(image)
+    #ax.axis('off')
+    #ax.set_title(f'Predicted tag: {predicted_tag} (Probability: {max_prob:.4f})', fontsize=10, fontweight='bold')
+    
+    #plt.tight_layout()
+    #plt.show()
+    
+    # Display the predicted tag
+    # print(f"Predicted tag: {predicted_tag} with probability {max_prob.item():.4f}\n")
+    # print(f"Images tagged successfully\n")
+    # return predicted_tags
+    
+def evaluate_tag_distribution(predicted_tags: list):
+    """
+    Evaluates and visualizes the distribution of predicted tags for each attribute.
+    
+    Args:
+        predicted_tags (dict): A dictionary where keys are attributes and values are lists of predicted tags.
+    Returns:
+        None
+    """
+    
+    for attribute, tags in predicted_tags.items():
+        print(f"\nAnalyzing distribution for attribute: {attribute.capitalize()}")
+        tag_counts = Counter(tags)
+        total_tags = sum(tag_counts.values())
+        tags_percentages = {tag: (count / total_tags) * 100 for tag, count in tag_counts.items()}
+
+        # Plot tag distribution as a bar chart
+        plt.figure(figsize=(16, 9))
+        plt.bar(tags_percentages.keys(), tags_percentages.values(), color="c")
+        plt.xlabel("Assigned tags")
+        plt.ylabel("Frequency (%)")
+        plt.title(f"Distribution of Predicted Tags for {attribute.capitalize()}")
+        plt.xticks(rotation=45, ha="right")
         plt.tight_layout()
         plt.show()
+
+        print("Tag Distribution (Percentages):")
+        for tag, proportion in tags_percentages.items():
+            print(f"{tag}: {proportion:.2f}%")
+
+def summarize_image_issues(available_splits: list):
+
+    issue_summary = pd.DataFrame()
+
+    for split in available_splits:
+        dataset = load_dataset("rishitdagli/cppe-5", split=split)
+        imagelab = Imagelab(hf_dataset=dataset, image_key="image")
+        imagelab.find_issues()
         
-        # Display the predicted tag
-        print(f"Predicted tag: {predicted_tag} with probability {max_prob.item():.4f}")
-    print("Images tagged successfully")
+        issue_counts = imagelab.issues.filter(like="is_").sum()
+        issue_percentage = round((issue_counts / len(imagelab.issues)) * 100, 3)
+        
+        issue_summary[split] = issue_counts
+        issue_summary[f"{split}_percentage"] = issue_percentage
     
+    print(issue_summary)
+
 def main():
     # Load the dataset
     dataset = load_custom_dataset("rishitdagli/cppe-5")
     # TODO: Load the dataset automatically from data derived by website extraction or the information available from datasets library
-    
     # Load the CLIP model
-    # model, processor = load_clip_model()
+    model, processor = load_clip_model()
     
     # Get dataset information
     dataset_info = get_dataset_information("rishitdagli/cppe-5")
-    print(dataset_info)
+    # print(dataset_info)
+    
     # TODO: Determine if the dataset contains vulnerable attributes.
     
-    # TODO: To start with, we can check if the dataset contains human. 
+    # TODO: Detect if dataset contains people
     # If so, we can create tags to classify the humans into protected groups such as gender, ethnicity, age, weight.
     
     # Tag the images
-    # tag_images(dataset, model, processor)
-    
-    # TODO: Evaluate the distribution of the tags
+    predicted_tags = tag_images(dataset, model, processor)
+
+    evaluate_tag_distribution(predicted_tags)
+
+    summarize_image_issues(dataset_info["split_names"])
 
 if __name__ == "__main__":
     main()
