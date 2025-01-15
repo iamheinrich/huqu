@@ -4,10 +4,7 @@ from PIL import Image
 import torch  # Added to handle tensor operations
 import matplotlib.pyplot as plt
 from collections import Counter
-from matplotlib import pyplot as plt
 from cleanvision import Imagelab
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
 import pandas as pd
 
 
