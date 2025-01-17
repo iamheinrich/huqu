@@ -15,6 +15,7 @@ torch = "^2.5.1"
 numpy = "^2.2.1"
 cleanvision = "^0.3.6"
 pandas = "^2.2.3"
+ipykernel = "^6.29.5"
 
 
 [tool.poetry.group.dev.dependencies]

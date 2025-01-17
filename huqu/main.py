@@ -6,26 +6,35 @@ import matplotlib.pyplot as plt
 from collections import Counter
 from cleanvision import Imagelab
 import pandas as pd
+from tqdm import tqdm
 
-
+# TODO: reorganize prompt structure
 prompts = {
     "gender": {
-        "single_gender": [
+        # "single_gender": [
+        #     "An image of a man",
+        #     "An image of a woman"
+        # ],
+        # "multiple_one_gender": [
+        #     "An image containing multiple men",
+        #     "An image containing multiple women"
+        # ],
+        "male": [
             "An image of a man",
-            "An image of a woman"
+            "An image containing multiple men"
         ],
-        "multiple_one_gender": [
-            "An image containing multiple men",
+        "female": [
+            "An image of a woman",
             "An image containing multiple women"
         ],
         "mixed_genders": [
             "An image containing both a man and a woman",
             "An image containing both men and women"
         ],
-        "proportions": [
-            "An image with more men than women",
-            "An image with more women than men"
-        ],
+        # "proportions": [
+        #     "An image with more men than women",
+        #     "An image with more women than men"
+        # ],
         "neutral_uncertain": [
             "An image where gender is not clearly identifiable"
         ]
@@ -106,7 +115,6 @@ prompts = {
     }
 }
 
-
 def load_custom_dataset(dataset_name: str):
     """
     Loads the specified dataset using the datasets library.
@@ -158,17 +166,7 @@ def get_dataset_information(dataset_name: str):
         "split_names": split_names
     }
 
-def tag_images(dataset, model, processor, split="test"):
-    """
-    Tags images in the dataset using the CLIP model.
-
-    Args:
-        dataset (Dataset): The dataset containing images.
-        model (CLIPModel): The CLIP model.
-        processor (CLIPProcessor): The CLIP processor.
-    Returns:
-        dict: A dictionary where keys are attributes and values are lists of predicted tags.
-    """
+def choose_attributes():
 
     protected_attributes = ["gender", "ethnicity", "age", "weight"]
 
@@ -176,95 +174,132 @@ def tag_images(dataset, model, processor, split="test"):
         try:
             input_attributes = input(f"Enter one or more of the following attributes {protected_attributes} you would like to analyze (comma-separated): ").split(",")
             selected_attributes = [attribute.strip() for attribute in input_attributes]
-    
+        
             # check if input attributes are part of protected attributes
             valid_attributes = [attribute for attribute in selected_attributes if attribute in protected_attributes]
             if not valid_attributes:
                 # currently raised only when all input attributes are not in protected attr
                 raise ValueError("No valid attributes selected. Please try again.")
             
-            print(f"Tagging images with selected attributes: {valid_attributes}")
             break
 
         except ValueError as e:
             print(e) 
 
+    return valid_attributes
+
+def tag_images(dataset, model, processor, selected_attributes, split):
+    
+    print(f"Tagging images with selected attributes: {selected_attributes}")
     # Create dict where keys are attributes and values are lists of predicted tags 
-    predicted_tags = {attribute: [] for attribute in valid_attributes}
+    predicted_tags = {attribute: [] for attribute in selected_attributes}
 
-    for image_data in dataset[split]: 
+    for image_data in tqdm(dataset[split], desc="Tagging images", unit="image"): 
         image = image_data["image"]
-
-        for attribute in valid_attributes:
-            attribute_prompts = [prompt for category in prompts[attribute].values() for prompt in category]
+    
+        for attribute in selected_attributes:
+            attribute_prompts = []
+            prompt_to_group = {}
+    
+            # TODO: reorganize prompt structure
+            for group_name, prompts_list in prompts[attribute].items():
+                for prompt in prompts_list:
+                    attribute_prompts.append(prompt)
+                    prompt_to_group[prompt] = group_name
+    
             inputs = processor(text=attribute_prompts, images=image, return_tensors="pt", padding=True)
             outputs = model(**inputs)
             probs = outputs.logits_per_image.softmax(dim=1).detach().numpy()[0]
-
+    
             max_idx = probs.argmax()
-            predicted_tag = attribute_prompts[max_idx]
+            predicted_prompt = attribute_prompts[max_idx]
+            predicted_group = prompt_to_group[predicted_prompt]
             
-            # Add predictions to dict
-            predicted_tags[attribute].append(predicted_tag)
+            # Add the predicted group to the resulting tags
+            predicted_tags[attribute].append(predicted_group)
+
 
     print("Images tagged successfully.")
     return predicted_tags
 
-    # print("Probabilities for each prompt:")
-    # for prompt, prob in zip(gender_prompts, probs):
-    #     print(f"Prompt: '{prompt}' - Probability: {prob:.4f}")
-    # print("Detached probs", probs)
-    
-    # Plot the image and predicted tag
-    #fig, ax = plt.subplots(figsize=(8, 8))
-    
-    # Display the image
-    #ax.imshow(image)
-    #ax.axis('off')
-    #ax.set_title(f'Predicted tag: {predicted_tag} (Probability: {max_prob:.4f})', fontsize=10, fontweight='bold')
-    
-    #plt.tight_layout()
-    #plt.show()
-    
-    # Display the predicted tag
-    # print(f"Predicted tag: {predicted_tag} with probability {max_prob.item():.4f}\n")
-    # print(f"Images tagged successfully\n")
-    # return predicted_tags
-    
-def evaluate_tag_distribution(predicted_tags: list):
-    """
-    Evaluates and visualizes the distribution of predicted tags for each attribute.
-    
-    Args:
-        predicted_tags (dict): A dictionary where keys are attributes and values are lists of predicted tags.
-    Returns:
-        None
-    """
-    
-    for attribute, tags in predicted_tags.items():
-        print(f"\nAnalyzing distribution for attribute: {attribute.capitalize()}")
-        tag_counts = Counter(tags)
-        total_tags = sum(tag_counts.values())
-        tags_percentages = {tag: (count / total_tags) * 100 for tag, count in tag_counts.items()}
+def calculate_tag_counts_and_percentages(attribute, tags):
+    """Calculate tag counts and percentages for a given attribute in a split."""
+    if attribute not in tags:
+        return {}, {}
 
-        # Plot tag distribution as a bar chart
-        plt.figure(figsize=(16, 9))
-        plt.bar(tags_percentages.keys(), tags_percentages.values(), color="c")
-        plt.xlabel("Assigned tags")
-        plt.ylabel("Frequency (%)")
-        plt.title(f"Distribution of Predicted Tags for {attribute.capitalize()}")
-        plt.xticks(rotation=45, ha="right")
+    tag_counts = Counter(tags[attribute])
+    total_tags = sum(tag_counts.values())
+    tag_percentages = {tag: round((count / total_tags) * 100, 2) for tag, count in tag_counts.items()}
+    return tag_counts, tag_percentages
+
+def analyze_attribute_data_per_split(attribute, predicted_tags):
+    """Analyze tag distribution for an attribute across splits."""
+    results = {}
+    
+    for split, tags in predicted_tags.items():
+        tag_counts, tag_percentages = calculate_tag_counts_and_percentages(attribute, tags)
+        update_results_with_split_data(results, split, tag_counts, tag_percentages)
+    
+    df = pd.DataFrame.from_dict(results, orient="index").fillna(0)
+    df.index.name = "Tag"
+    df.reset_index(inplace=True)
+    df.sort_values(by="Tag", inplace=True)
+    return df
+
+def update_results_with_split_data(results, split, tag_counts, tag_percentages):
+    """Update results dictionary with count and percentage data for given split."""
+    for tag, count in tag_counts.items():
+        if tag not in results:
+            results[tag] = {}
+        results[tag][f"Count_{split}"] = count
+        results[tag][f"Percentage_{split}"] = tag_percentages[tag]
+
+def generate_tagging_report(predicted_tags):
+    """Generate tables for tag distributions across attributes."""
+    
+    all_attributes_tables = {}
+    
+    # Get attribute name to be analyzed
+    attributes = next(iter(predicted_tags.values())).keys()
+    
+    for attribute in attributes:
+        df = analyze_attribute_data_per_split(attribute, predicted_tags)
+        
+        # Print table for the current attribute
+        print(f"\nTag Distribution for Attribute: {attribute.capitalize()}")
+        print("=" * 90)
+        print(df.to_string(index=False))
+        print("=" * 90)
+        
+        # Store DataFrame in the results dictionary
+        all_attributes_tables[attribute] = df
+    
+    return all_attributes_tables
+
+def visualize_tag_percentages(attribute_tables):
+    """Plot tag percentages as bar chart"""
+    for attribute, df in attribute_tables.items():
+        # Select percentage column for bar chart
+        percent_cols = [col for col in df.columns if col.startswith("Percentage_")]
+        percent_df = df.set_index("Tag")[percent_cols]
+    
+        # Uncomment to get top 4 tags across splits
+        # percent_df["Total_Percentage"] = percent_df.sum(axis=1)
+        # top_tags_distribution = percent_df.nlargest(4, "Total_Percentage").drop(columns=["Total_Percentage"])
+        
+        # Plot bar chart comparing splits
+        percent_df.plot(kind="bar", stacked=False, figsize=(10, 6))
+        plt.title(f"Percentage Distribution for attribute: {attribute.capitalize()}")
+        plt.ylabel("Percentage (%)")
+        plt.xlabel("Tag")
+        plt.xticks(rotation=0)
+        plt.legend(title="Split")
         plt.tight_layout()
         plt.show()
-
-        print("Tag Distribution (Percentages):")
-        for tag, proportion in tags_percentages.items():
-            print(f"{tag}: {proportion:.2f}%")
 
 def summarize_image_issues(available_splits: list):
 
     issue_summary = pd.DataFrame()
-
     for split in available_splits:
         dataset = load_dataset("rishitdagli/cppe-5", split=split)
         imagelab = Imagelab(hf_dataset=dataset, image_key="image")
@@ -276,7 +311,10 @@ def summarize_image_issues(available_splits: list):
         issue_summary[split] = issue_counts
         issue_summary[f"{split}_percentage"] = issue_percentage
     
+    print("\nImage Issues detected across splits:")
+    print("=" * 90)
     print(issue_summary)
+    print("=" * 90)
 
 def main():
     # Load the dataset
@@ -294,10 +332,20 @@ def main():
     # TODO: Detect if dataset contains people
     # If so, we can create tags to classify the humans into protected groups such as gender, ethnicity, age, weight.
     
-    # Tag the images
-    predicted_tags = tag_images(dataset, model, processor)
+    chosen_attributes = choose_attributes()
 
-    evaluate_tag_distribution(predicted_tags)
+    # Tag all images across splits with chosen_attributes
+    all_predicted_tags = {}
+    for split in dataset_info["split_names"]:
+        print(f"\nProcessing split: {split}")
+        # Tag images for current split using chosen_attributes
+        predicted_tags = tag_images(dataset, model, processor, chosen_attributes, split=split)
+        all_predicted_tags[split] = predicted_tags
+
+
+    tagging_report = generate_tagging_report(all_predicted_tags)
+
+    visualize_tag_percentages(tagging_report)
 
     summarize_image_issues(dataset_info["split_names"])
 
