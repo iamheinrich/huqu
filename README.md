@@ -45,7 +45,7 @@ This project is a prototype for a dataset statistics analyzer focused on Hugging
 
 5. **Data Storage**:
 
-   - Uses a structured format (e.g., Pandas DataFrame) to store analysis results.
+   - Uses a structured format (e.g., json to store analysis results.
    - Example structure:
      ```json
      {
@@ -77,11 +77,11 @@ This project is a prototype for a dataset statistics analyzer focused on Hugging
 
 - **Attributes**:
 
-  - Initial protected attributes: Gender, Ethnicity.
+  - Initial protected attributes: Gender, Ethnicity, Age, Weight.
 
 - **Image Statistics**:
 
-  - Computes basic aggregates (brightness and hue).
+  - Computes basic aggregates (brightness, hue, etc).
 
 - **Datasets**:
 
@@ -139,7 +139,7 @@ This project is a prototype for a dataset statistics analyzer focused on Hugging
 
 2. **Image Statistics**:
 
-   - Calculate brightness and hue using PIL.
+   - Calculate brightness, hue etc using PIL.
 
 3. **Issue Detection**:
 

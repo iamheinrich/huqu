@@ -1,2 +1,4 @@
 archive/
 dev_playground/
+.cursorrules
+__pycache__/
