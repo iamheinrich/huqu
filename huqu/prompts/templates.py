@@ -50,71 +50,163 @@ class PromptTemplates:
         )
     
     @staticmethod
-    def summarize_dimensions(dimensions: str) -> str:
-        """Deduplicate and refine the discovered dimensions.
-        
-        Used after dimension discovery to remove redundancy and ensure dimensions are distinct.
-        Combines similar dimensions and ensures they are at the right granularity level.
-        
-        Args:
-            dimensions: Comma-separated string of dimensions to summarize
+    def summarize_and_reduce_dimensions(dimensions: List[str]) -> str:
         """
+        Merge or remove redundant/overly similar dimensions. 
+        Keep the most general or broadly applicable dimension wherever possible. 
+        Return final result in the format:
+        
+            Final Dimensions: dim1, dim2, dim3, ...
+        """
+
+        dims_str = ", ".join(dimensions)
+
         return (
-            f"Here are several words each standing for a dimension to differentiate the images in a dataset, "
-            f"but some of these words may be highly similar to each other and thus redundant. "
-            f"Please give a refined set of classification dimensions strictly in the same format. "
-            f"Here are the dimensions: {dimensions} "
-            f"Answer strictly in the following format: 'Summarized Dimension: A, B, ...', "
-            f"such as: 'Summarized Dimension: Action, Location, Mood, ...'"
+            f"Below is a list of discovered dimension keywords for classifying images, but they could be:\n"
+            f"- Duplicative (e.g., 'color', 'hue', 'shade' all refer to color)\n"
+            f"- Overly specific if there's a more general dimension available\n"
+            f"- Irrelevant or hateful/harmful\n\n"
+
+            # --- FEW-SHOT EXAMPLE 1 ---
+            f"Example 1:\n"
+            f"Given Dimensions: color, hue, shade, brightness\n"
+            f"Analysis: 'hue' and 'shade' are essentially sub-concepts of 'color'; 'brightness' might be too narrow.\n"
+            f"Decision: Merge everything into 'color' because it's the most general dimension.\n"
+            f"Correct Response: Final Dimensions: color\n\n"
+
+            # --- FEW-SHOT EXAMPLE 2 ---
+            f"Example 2:\n"
+            f"Given Dimensions: mood, emotion, atmosphere, color, color\n"
+            f"Analysis: 'mood', 'emotion', and 'atmosphere' overlap heavily; 'color' is distinct. "
+            f"There are duplicates of 'color'.\n"
+            f"Decision: Merge mood, emotion, atmosphere into 'mood' (the broadest). Keep 'color' once.\n"
+            f"Correct Response: Final Dimensions: mood, color\n\n"
+
+            # --- FEW-SHOT EXAMPLE 3 ---
+            f"Example 3:\n"
+            f"Given Dimensions: background, location, setting, hateful_word\n"
+            f"Analysis: 'hateful_word' is inappropriate; remove it. 'background' and 'setting' overlap with 'location'.\n"
+            f"Decision: Merge 'background' and 'setting' into 'location' since it's broader.\n"
+            f"Correct Response: Final Dimensions: location\n\n"
+
+            # --- FEW-SHOT EXAMPLE 4 ---
+            f"Example 4:\n"
+            f"Given Dimensions: action, pose, posture\n"
+            f"Analysis: 'pose' and 'posture' overlap; 'action' is somewhat distinct because it implies motion.\n"
+            f"Decision: Merge 'pose' and 'posture' into 'pose'. Keep 'action' if it’s significantly different.\n"
+            f"Correct Response: Final Dimensions: pose, action\n\n"
+
+            # -- ACTUAL TASK --
+            f"Now, here are the dimensions you need to refine: {dims_str}\n\n"
+            f"Instructions:\n"
+            f"1) Merge any dimensions that are synonyms or near-duplicates into a single keyword.\n"
+            f"2) Remove any irrelevant or hateful/harmful dimension.\n"
+            f"3) If multiple dimensions overlap, keep the one that is the most general or widely applicable.\n"
+            f"4) Keep the final list under ~5 to 7 distinct dimensions.\n\n"
+            f"Return your final answer in this strict format:\n"
+            f"Final Dimensions: dimA, dimB, dimC, ..."
         )
-    
+
     # Stage 4: Feature Discovery
     @staticmethod
     def get_features(main_subject: str, dimension: str, caption_samples: str) -> str:
-        """Discover attributes for a specific dimension.
-        
-        Used in the Feature Discovery stage to identify specific attributes for each dimension.
-        Each attribute should be distinct and allow for clear classification.
-        
-        Args:
-            main_subject: Main subject/theme of the dataset
-            dimension: The dimension to find attributes for
-            caption_samples: String of caption examples, newline separated
         """
+        Discover attributes for a specific dimension, in a dataset-agnostic way. Only include
+        attributes directly relevant to the given dimension (e.g., if the dimension is "color,"
+        you might include "red," "blue," "green," but ignore time references; if the dimension
+        is "time_of_day," you might include "morning," "night," "sunset," but ignore colors or
+        location references, etc.).
+
+        Each attribute must:
+        - Be less than three words
+        - Be representative of the dimension in question
+        - Avoid overlapping concepts from other potential dimensions
+        - Occur frequently enough across the captions to be useful
+
+        The final answer must be strictly in the format:
+        dimension: phrase1, phrase2, phrase3, ...
+
+        Args:
+            main_subject: The overall subject/theme of the dataset (e.g., "scenes" or "portraits")
+            dimension: The dimension to find attributes for (e.g., "color," "time_of_day," "location")
+            caption_samples: A string of caption examples (newline-separated)
+        """
+
         return (
-            f"Chat, I want you to look at a few captions of images in my dataset about {main_subject} "
-            f"and formulate a classification criteria for me to better structure my datasets with respect "
-            f"to one classification dimension: {dimension}. For example, a good criteria I want you to craft "
-            f"might be similar to 'action: blowing bubbles, fixing a bike, climbing...', where the word 'action' "
-            f"stands for the dimension of this classification and the phrases 'blowing bubbles', 'fixing a bike', "
-            f"'climbing'...stand for the specific action involved in the image described by the caption. "
-            f"Here are the captions: {caption_samples} Please consider carefully about what to be included in "
-            f"the criteria and only include the key phrases that can be frequently used. Each phrase should be "
-            f"less than three words. Now give me the criteria strictly in the form of 'dimension: phrase1, phrase2, ...' "
-            f"with at most 10 key phrases in total."
+            f"I want you to analyze these image captions about {main_subject}. We need to extract "
+            f"a set of up to 10 key phrases that represent the single dimension '{dimension}'.\n\n"
+
+            f"Here are the captions:\n"
+            f"{caption_samples}\n\n"
+
+            f"Guidelines:\n"
+            f"- Focus exclusively on '{dimension}'. Do not include phrases that belong to other dimensions.\n"
+            f"- Each phrase must be less than three words.\n"
+            f"- For instance, if the dimension is 'color,' only list color attributes (e.g., 'red,' 'pale blue'); "
+            f"if the dimension is 'time_of_day,' only list times or lighting-related phrases (e.g., 'morning,' 'sunset').\n"
+            f"- Exclude any attributes that do not reflect the dimension '{dimension}'.\n\n"
+
+            f"Finally, provide your answer in exactly this form (with no extra text):\n"
+            f"dimension: phrase1, phrase2, phrase3, ...\n"
         )
     
     @staticmethod
-    def summarize_attributes(dimension: str, suggestions: str) -> str:
-        """Deduplicate and refine attributes for a dimension.
-        
-        Used after feature discovery to ensure attributes are distinct and non-overlapping.
-        Each image should be classifiable into exactly one attribute per dimension.
-        
-        Args:
-            dimension: The dimension these attributes belong to
-            suggestions: String of attribute suggestions to summarize
+    def summarize_and_reduce_attributes(dimension: str, attributes: List[str]) -> str:
         """
+        Merge or remove redundant/overly similar attributes for a specific dimension.
+        Keep at most ~5 that are broad or most commonly applicable. Remove hateful/harmful.
+        Return final result in the format:
+            Final Attributes: attr1, attr2, attr3, ...
+        """
+
+        attrs_str = ", ".join(attributes)
+
         return (
-            f"Here are several attribute phrases with respect to one classification dimension: {dimension}, "
-            f"but some of these phrases are highly similar to each other and thus redundant. "
-            f"Please give a refined set of classification attribute phrases. "
-            f"Here are the original attribute phrases: {suggestions} "
-            f"Each phrase should be less than three words. "
-            f"Answer strictly in the following format: 'Summarized Attributes: A, B, ...', "
-            f"such as 'Summarized Attributes: blowing bubbles, fixing a bike, climbing...'"
+            f"Here is a list of attribute phrases for the dimension '{dimension}'. Some may be duplicates, "
+            f"synonyms, overly specific, or harmful.\n\n"
+
+            # --- FEW-SHOT EXAMPLE 1 ---
+            f"Example 1:\n"
+            f"Dimension: color\n"
+            f"Attributes: white, black, turquoise, teal, red, pink, vibrant green, bright orange\n"
+            f"Analysis: 'turquoise' and 'teal' overlap; 'vibrant green' can be shortened to 'green'. "
+            f"Keep only 5 total.\n"
+            f"Correct Response: Final Attributes: white, black, green, orange, red\n\n"
+
+            # --- FEW-SHOT EXAMPLE 2 ---
+            f"Example 2:\n"
+            f"Dimension: activity\n"
+            f"Attributes: sleeping, snoozing, lying down, resting, dozing, relaxing\n"
+            f"Analysis: All revolve around 'sleeping'/'resting'; condense into fewer distinct items.\n"
+            f"Correct Response: Final Attributes: sleeping, resting\n\n"
+
+            # --- FEW-SHOT EXAMPLE 3 ---
+            f"Example 3:\n"
+            f"Dimension: shape\n"
+            f"Attributes: round, circular, ball-shaped, square, quadrilateral, polygon\n"
+            f"Analysis: 'round', 'circular', and 'ball-shaped' are nearly the same. 'square' and 'quadrilateral' "
+            f"are quite similar. Keep only ~5 attributes that are distinct.\n"
+            f"Correct Response: Final Attributes: round, square, polygon\n\n"
+
+            # --- FEW-SHOT EXAMPLE 4 ---
+            f"Example 4:\n"
+            f"Dimension: texture\n"
+            f"Attributes: rough, bumpy, smooth, smooth surface, grainy, coarse, silky, harsh\n"
+            f"Analysis: 'smooth' and 'smooth surface' overlap. 'rough', 'bumpy', 'grainy', 'coarse', and 'harsh' "
+            f"might be partially redundant; 'harsh' could be merged into 'rough' if appropriate. "
+            f"Keep just a handful of distinct terms.\n"
+            f"Correct Response: Final Attributes: rough, smooth, grainy, silky\n\n"
+
+            f"Now, for the dimension '{dimension}', the attributes are: {attrs_str}\n\n"
+            f"Guidelines:\n"
+            f"1) Merge near-duplicates or synonyms.\n"
+            f"2) Remove harmful or irrelevant items.\n"
+            f"3) Keep at most ~5 broad or commonly used attributes.\n\n"
+            f"Return them strictly in the format:\n"
+            f"Final Attributes: A, B, C, ..."
         )
-    
+
+        
     # Stage 5: Classification
     @staticmethod
     def test_classification(dimension: str, sample: str, features: str) -> str:
@@ -159,19 +251,23 @@ class PromptTemplates:
             f"Test Results: {test_results}\n\n"
             f"We are unable to classify this caption using the provided criteria due to one of the "
             f"following reasons:\n\n"
-            f"LLM Hallucination: If you believe the current criteria is reasonable, and the sample can be "
-            f"classified under one of them, the current failure may be due to LLM hallucination. If the "
-            f"majority of classifications are correct and only a small portion of the results appears highly "
-            f"unreasonable, it is likely due to hallucination. In this case, please do nothing.\n\n"
-            f"Answer format: {{\"hallucination\": []}}\n"
-            f"Hard Case: If each classification result is reasonable on its own, but there are inconsistencies "
+            f"1. LLM Hallucination: If you believe the current criteria is reasonable, and the sample can be "
+            f"classified under one of them, the current failure may be due to LLM hallucination. This occurs when "
+            f"the majority of classifications are correct and only a small portion of results appear highly "
+            f"unreasonable.\n\n"
+            f"2. Hard Case: If each classification result is reasonable on its own, but there are inconsistencies "
             f"between them (i.e., the results differ but none are unreasonable), this situation may be considered "
-            f"a \"hard case\" where there is no clear-cut classification. In this case, please do nothing.\n\n"
-            f"Answer format: {{\"hard_case\": []}}\n"
-            f"Missing Attributes: If some important attributes are missing and need to be added to the criteria "
-            f"to accurately classify the caption, please suggest one attribute to add.\n\n"
-            f"Answer format: {{\"missing\": [\"keyword\"]}}"
+            f"a \"hard case\" where there is no clear-cut classification.\n\n"
+            f"3. Missing Attributes: If some important attributes are missing and need to be added to the criteria "
+            f"to accurately classify the caption.\n\n"
+            f"Respond with ONLY ONE of these formats:\n"
+            f"- 'HALLUCINATION' (if reason 1 applies)\n"
+            f"- 'HARD_CASE' (if reason 2 applies)\n"
+            f"- 'MISSING: attribute_phrase' (if reason 3 applies)\n"
+            f"Example: 'MISSING: nighttime lighting'"
         )
+        
+
     
     @staticmethod
     def validate_attribute(criteria: str, new_attribute: str) -> str:
@@ -185,10 +281,10 @@ class PromptTemplates:
             new_attribute: New attribute to validate
         """
         return (
-            f"Chat, I'm refining a classification criteria with one extra attribute. "
-            f"Tell me if this new attribute fits into the original criteria. "
-            f"The current criteria is: {criteria} The new attribute is: {new_attribute} "
-            f"Tell me in the strict form of {{Yes}} or {{No}}."
+            f"Here is a set of classification criteria: {criteria} "
+            f"I want to add a new attribute: {new_attribute} "
+            f"Please tell me if this new attribute is consistent with the existing criteria. "
+            f"Answer strictly in the form of {{yes}} or {{no}}."
         )
 
     # Stage 7: Final Assignment

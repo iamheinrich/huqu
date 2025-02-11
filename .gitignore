@@ -2,3 +2,17 @@ archive/
 dev_playground/
 __pycache__/
 .cursorrules
+.env
+data
+tests
+pytest_cache/
+*exploration.ipynb
+.cache
+*.ipynb
+*requirements.md
+*qwen.py
+*llava.py
+*groq.py
+*api_base.py
+*base.py
+.DS_Store
