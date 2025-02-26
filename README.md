@@ -42,7 +42,7 @@ The library helps machine learning practitioners to:
 1. Clone the repository:
 
 ```bash
-git clone [repository-url]
+git clone https://github.com/iamheinrich/huqu.git
 ```
 
 2. Install dependencies using Poetry:
@@ -63,7 +63,6 @@ OPENAI_API_KEY=your_openai_api_key
 
 - `huqu/`: Main library code
 - `scripts/`: Utility scripts and tools
-- `tests/`: Test files
 - `pipeline_config.yaml`: Configuration for the evaluation pipeline
 
 ## Usage
