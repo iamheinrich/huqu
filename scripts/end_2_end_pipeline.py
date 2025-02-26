@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-End-to-end pipeline for generating Semantic Structure Descriptions (SSD).
+End-to-end pipeline
 
-This script demonstrates how to use the huqu package to:
+Demonstrate how to use the huqu package to:
 1. Load and filter images for a specific class
-2. Generate detailed captions for each image
-3. Discover classification dimensions and attributes
-4. Refine and validate the classification criteria
+2. Generate captions for each image
+3. Discover criteria (dimensions and attributes)
+4. Refine and validate the criteria
 5. Assign images to attributes within each dimension
 """
 
@@ -33,10 +33,10 @@ def run_pipeline(
     **kwargs
 ) -> None:
     """
-    Run the complete SSD generation pipeline.
+    Run the complete SSD pipeline.
 
     Args:
-        **kwargs: Additional configuration parameters for pipeline stages
+        **kwargs: Additional config parameters for pipeline stages
     """
 
     try:
