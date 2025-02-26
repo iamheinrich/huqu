@@ -7,7 +7,7 @@ def load_and_split_data(file_path: str, num_training_images: int) -> Tuple[pd.Da
     
     Args:
         file_path: Path to the parquet file containing assignments
-        num_training_images: Number of training images per dimension
+        num_training_images: Number of training images. Assumes same number of training images for each class.
         
     Returns:
         Tuple of (train_df, test_df)
@@ -21,7 +21,7 @@ def load_and_split_data(file_path: str, num_training_images: int) -> Tuple[pd.Da
     return train_df, test_df
 
 def main():
-    num_training_images = 2  # Can be modified as needed
+    num_training_images = 2  # Modify to match num_training_images according to pipeline_config
     
     # File paths
     data_dir = Path("data")
