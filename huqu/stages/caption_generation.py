@@ -13,7 +13,7 @@ class CaptionGenerationStage(PipelineStage):
         """Initialize with a single multimodal model.
         
         Args:
-            model: Model implementing image-to-text generation interface
+            model: Multimodal Modal Class
         """
         super().__init__(models={"mllm": model})
         self.class_name = self.config["dataset"]["class_name"]
@@ -34,14 +34,12 @@ class CaptionGenerationStage(PipelineStage):
         except Exception as e:
             return f"[Error: {str(e)}]"
     
-    def process(self, dataset: Dataset) -> pd.DataFrame:
+    def process(self, dataset: Dataset) -> None:
         """Generate captions for all images in the dataset.
         
         Args:
             dataset: Hugging Face dataset containing images
             
-        Returns:
-            Nothing, just saves the DataFrame to the path specified in the config
         """
         image_ids = []
         captions = []
