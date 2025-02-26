@@ -28,11 +28,9 @@ The library helps machine learning practitioners to:
 ### Main Dependencies
 
 - datasets
-- torch
 - numpy
 - pandas
 - huggingface-hub
-- google-genai
 - openai
 - python-dotenv
 - pillow
