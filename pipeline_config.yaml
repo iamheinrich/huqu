@@ -1,0 +1,26 @@
+# Pipeline Configuration
+
+# Dataset and DataFrame settings
+dataset:
+  path: "Bingsu/Cat_and_Dog" # The path of the hugging face dataset
+  config_name: "default"
+  class_name: "dog"
+  class_label: 1
+  label_key: "labels" # Some datasets have different keys for the labels, like "label" or "labels"
+  num_train_samples: 2
+  num_test_samples: 2
+  main_subject: "dogs" # The main theme or subject of the dataset
+  captions_path: "data/captions_dogs.parquet" # Path to store the captions DataFrame
+  assignments_path: "data/assignments_dogs.parquet" # Path to store the assignments DataFrame
+  unrefined_criteria_path: "data/unrefined_criteria_dogs.json" # Path to store initial criteria
+  refined_criteria_path: "data/refined_criteria_dogs.json" # Path to store refined criteria
+  format: "parquet" # Format for stroing DataFrames
+  compression: "snappy" # Compression method for parquet files
+
+# Pipeline stages settings
+stages:
+  criteria_init:
+    batch_size: 2
+  criteria_refinement:
+    num_rounds: 1
+    sample_size: 2

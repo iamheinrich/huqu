@@ -15,12 +15,22 @@ torch = "^2.5.1"
 numpy = "^2.2.1"
 cleanvision = "^0.3.6"
 pandas = "^2.2.3"
+ipykernel = "^6.29.5"
+accelerate = "^1.3.0"
+llama-cpp-python = "^0.3.6"
+huggingface-hub = "^0.27.1"
+groq = "^0.16.0"
+google-genai = "^1.0.0"
+python-dotenv = "^1.0.1"
+openai = "^1.61.1"
 
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.29.5"
 jupyter = "^1.1.1"
 matplotlib = "^3.10.0"
+notebook = "^7.3.2"
+pytest = "^8.3.4"
 
 [build-system]
 requires = ["poetry-core"]
