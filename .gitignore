@@ -1,15 +1,7 @@
-archive/
 __pycache__/
 .env
-tests
+/tests
 pytest_cache/
-models/base.py
-*exploration.ipynb
 .cache
-*requirements.md
-*qwen.py
-*llava.py
-*groq.py
-*api_base.py
 .DS_Store
 .pytest_cache/
