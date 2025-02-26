@@ -65,7 +65,7 @@ OPENAI_API_KEY=your_openai_api_key
 
 ## Usage
 
-[Basic usage instructions will go here]
+A basic tutorial will follow soon!
 
 ## License
 
