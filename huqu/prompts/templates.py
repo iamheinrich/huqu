@@ -44,7 +44,7 @@ class PromptTemplates:
             f"Chat, I want to categorize a set of images all about {main_subject} into several parts "
             f"and I'm asking you to suggest some dimensions I can use to categorize them. "
             f"For example, a dimension can be something like: color, position, background, or other keywords "
-            f"that can better differentiate these images. Here are {batch_size} image captions: {caption_samples} "
+            f"that can better differentiate these images.We  Here are {batch_size} image captions: {caption_samples} "
             f"Please give me 5 most suggested dimensions with each represented by a single keyword in its lower case. "
             f"Answer strictly in the following format: 'Suggested Dimension: A, B, ...'"
         )

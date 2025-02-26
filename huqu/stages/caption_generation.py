@@ -16,8 +16,8 @@ class CaptionGenerationStage(PipelineStage):
             model: Model implementing image-to-text generation interface
         """
         super().__init__(models={"mllm": model})
-        self.batch_size = self.config["stages"]["caption_generation"]["batch_size"]
         self.class_name = self.config["dataset"]["class_name"]
+        
     def _generate_single_caption(self, image: Any, prompt: str) -> str:
         """Generate a caption for a single image with basic error handling.
         
@@ -41,7 +41,7 @@ class CaptionGenerationStage(PipelineStage):
             dataset: Hugging Face dataset containing images
             
         Returns:
-            DataFrame with image_ids and captions
+            Nothing, just saves the DataFrame to the path specified in the config
         """
         image_ids = []
         captions = []
@@ -68,10 +68,4 @@ class CaptionGenerationStage(PipelineStage):
         
         # Save DataFrame if path is configured
         df_path = self.config["dataset"]["captions_path"]
-        if df_path:
-            df.to_parquet(
-                df_path,
-                compression=self.config["dataset"]["compression"]
-            )
-        
-        return df
+        df.to_parquet(df_path, compression=self.config["dataset"]["compression"])

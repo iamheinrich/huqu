@@ -1,14 +1,23 @@
 from typing import Any, Dict, List
 import pandas as pd
 from tqdm import tqdm
+import logging
 from .base import PipelineStage
 from ..models.base import BaseModel
 from ..prompts.templates import PromptTemplates
+import json
 
+logger = logging.getLogger(__name__)
 
 class ImageAssignmentStage(PipelineStage):
-    """Pipeline stage for assigning images to attributes within each dimension
-    using the final classification prompt.
+    """Pipeline stage for assigning images to attributes within each dimension.
+    
+    This stage:
+    1. Loads captions from the configured captions_path
+    2. Loads refined criteria from the configured refined_criteria_path
+    3. Assigns each image to attributes for each dimension using the classification prompt
+    4. Builds a Semantic Structure Description (SSD) DataFrame
+    5. Saves the SSD to the configured assignments_path
     """
     
     def __init__(self, model: BaseModel):
@@ -20,18 +29,24 @@ class ImageAssignmentStage(PipelineStage):
         super().__init__(models={"llm": model})
         self.class_name = self.config["dataset"]["class_name"]
     
-    def process(self, criteria: Dict[str, Any], **kwargs) -> pd.DataFrame:
-        """
-        Process captions and assign them to attributes for each dimension.
+    def process(self, **kwargs) -> None:
+        """Process captions and assign them to attributes for each dimension.
         
-        Args:
-            criteria: Dictionary containing dimensions and their attributes
+        Loads captions and refined criteria from their configured paths,
+        processes each caption to assign attributes for each dimension,
+        builds a Semantic Structure Description (SSD) DataFrame, and
+        saves it to the configured assignments_path.
         
-        Returns:
-            DataFrame with captions and their assigned attributes
+        The SSD DataFrame contains columns:
+        - class: The class name of the images
+        - dimension: The dimension being classified
+        - attribute: The assigned attribute for that dimension
+        - image_id: The ID of the image being classified
         """
-        # Load captions
+        # Load captions and refined criteria
         df = pd.read_parquet(self.config["dataset"]["captions_path"])
+        with open(self.config["dataset"]["refined_criteria_path"]) as f:
+            criteria = json.load(f)
         
         # Ensure required columns exist
         required_cols = {"caption", "image_id"}
@@ -67,15 +82,13 @@ class ImageAssignmentStage(PipelineStage):
                     "image_id": row["image_id"]
                 }
                 
-        # Optionally save results
+        # Save results
         output_path = self.config["dataset"]["assignments_path"]
-        if output_path:
-            final_ssd.to_parquet(
-                output_path,
-                compression=self.config["dataset"]["compression"]
-            )
-        
-        return final_ssd
+        final_ssd.to_parquet(
+            output_path,
+            compression=self.config["dataset"]["compression"]
+        )
+        logger.info(f"Saved SSD DataFrame to {output_path}")
     
     def _assign_attribute(self, caption: str, dimension: str, attributes: List[str]) -> str:
         """
@@ -108,4 +121,5 @@ class ImageAssignmentStage(PipelineStage):
             return response
         
         # Otherwise, fallback to the first attribute
+        logger.debug(f"No matching attribute found for {dimension}, using default")
         return attributes[0]

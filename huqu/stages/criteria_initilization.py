@@ -1,20 +1,38 @@
-from typing import Any, List, Dict, Set, Optional
+from typing import Any, List, Dict, Set, Optional, TypedDict
 import pandas as pd
 from tqdm import tqdm
+import logging
 from .base import PipelineStage
 from ..prompts.templates import PromptTemplates
 from ..models.base import BaseModel
-from ..types import ClassificationCriteria
+import json
 
-#TODO: We should think about adding config file to define the most important params like dataframe, num_refining_rounds, sample_size, etc.
-#TODO: We need a well-defined interface for storing the dimensions and attributes
+logger = logging.getLogger(__name__)
+
+class ClassificationCriteria(TypedDict):
+    """Type definition for classification criteria.
+    
+    Structure:
+        dimensions: List of dimension keywords
+        attributes: Dictionary mapping each dimension to its list of attributes
+    """
+    dimensions: List[str]
+    attributes: Dict[str, List[str]]
 
 class CriteriaInitializationStage(PipelineStage):
-    """Discovers and refines dimensions and attributes for categorizing images based on their captions.
+    """Pipeline stage for discovering and initializing classification criteria.
     
-    This stage implements a two-pass approach:
+    This stage analyzes image captions to identify meaningful dimensions and attributes
+    for categorizing images. It uses a two-pass approach:
     1. First Pass: Process all batches to collect and summarize dimensions
     2. Second Pass: Using summarized dimensions, collect and summarize attributes
+    
+    Configuration:
+        The stage requires the following config parameters:
+        - dataset.captions_path: Path to the parquet file containing captions
+        - dataset.unrefined_criteria_path: Path to save the initial criteria
+        - stages.criteria_init.batch_size: Number of captions to process per batch
+        - dataset.main_subject: The main subject being analyzed (e.g., "cat")
     """
     
     def __init__(self, model: BaseModel):
@@ -55,12 +73,23 @@ class CriteriaInitializationStage(PipelineStage):
     
     
     def _summarize_and_reduce_dimensions(self, all_dimensions: Set[str]) -> List[str]:
-        """Combine summarization and cleanup of dimension keywords in one call."""
+        """Summarize and clean up dimension keywords to create a final set.
+        
+        Takes the raw set of dimensions discovered from all batches and:
+        1. Removes duplicates and near-duplicates
+        2. Standardizes formatting and terminology
+        3. Combines related dimensions
+        4. Ensures dimensions are meaningful for the main subject
+        
+        Args:
+            all_dimensions: Set of all raw dimensions discovered from captions
+            
+        Returns:
+            List of cleaned and standardized dimension keywords
+        """
         dims_list = list(all_dimensions)
         prompt = PromptTemplates.summarize_and_reduce_dimensions(dims_list)
-        print(f"\n[SUMMARIZE & REDUCE DIMENSIONS] Prompt:\n{prompt}")
         response = self.models["llm"].generate(prompt)
-        print(f"[SUMMARIZE & REDUCE DIMENSIONS] Response:\n{response}")
 
         # Try to parse "Final Dimensions: ..." from response
         search_key = "Final Dimensions:"
@@ -92,10 +121,7 @@ class CriteriaInitializationStage(PipelineStage):
                 dimension=dimension,
                 caption_samples="\n".join(sanitized_captions)  # Safe join
             )
-            print(f"\n[COLLECT ATTRIBUTES] Dimension: {dimension}")
-            print(f"[COLLECT ATTRIBUTES] Prompt:\n{feature_prompt}")
             feature_response = self.models["llm"].generate(feature_prompt)
-            print(f"[COLLECT ATTRIBUTES] Response:\n{feature_response}")
             
             response_lower = feature_response.lower()
             if "dimension:" in response_lower:
@@ -117,10 +143,7 @@ class CriteriaInitializationStage(PipelineStage):
             if dimension in self.dimension_attributes:
                 attrs_list = list(self.dimension_attributes[dimension])
                 prompt = PromptTemplates.summarize_and_reduce_attributes(dimension, attrs_list)
-                print(f"\n[SUMMARIZE & REDUCE ATTRIBUTES] Dimension: {dimension}")
-                print(f"[SUMMARIZE & REDUCE ATTRIBUTES] Prompt:\n{prompt}")
                 response = self.models["llm"].generate(prompt)
-                print(f"[SUMMARIZE & REDUCE ATTRIBUTES] Response:\n{response}")
 
                 search_key = "Final Attributes:"
                 if search_key in response:
@@ -129,6 +152,7 @@ class CriteriaInitializationStage(PipelineStage):
                     final_attributes[dimension] = final_attrs
                 else:
                     # fallback
+                    logger.warning(f"Could not parse attributes for dimension {dimension}, using original list")
                     final_attributes[dimension] = set(attrs_list)
             else:
                 final_attributes[dimension] = set()
@@ -136,6 +160,21 @@ class CriteriaInitializationStage(PipelineStage):
         self.dimension_attributes = final_attributes
         
     def process(self) -> ClassificationCriteria:
+        """Process captions to discover and initialize classification criteria.
+        
+        Loads captions from the configured captions_path, processes them to discover
+        dimensions and attributes, and saves the initial criteria to the configured
+        unrefined_criteria_path as JSON.
+        
+        Returns:
+            Dict containing the discovered dimensions and attributes with structure:
+            {
+                "dimensions": List[str],  # List of dimension keywords
+                "attributes": Dict[str, List[str]]  # Dimension -> attributes mapping
+            }
+            Note: While this method returns the criteria, it also saves them to the
+            configured path for use by subsequent stages.
+        """
         df_path = self.config["dataset"]["captions_path"]
         df = pd.read_parquet(df_path)
         
@@ -167,9 +206,17 @@ class CriteriaInitializationStage(PipelineStage):
             if self.dimension_attributes.get(dim, set())
         ]
         
-        return ClassificationCriteria(
-            dimensions=self.summarized_dimensions,
-            attributes={
+        # Build criteria dictionary with type checking
+        criteria: ClassificationCriteria = {
+            "dimensions": self.summarized_dimensions,
+            "attributes": {
                 dim: list(attrs) for dim, attrs in self.dimension_attributes.items()
             }
-        )
+        }
+
+        # Save criteria using config path
+        output_path = self.config["dataset"]["unrefined_criteria_path"]
+        with open(output_path, "w") as f:
+            json.dump(criteria, f, indent=2)
+        
+        return criteria

@@ -2,18 +2,13 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 from dataclasses import dataclass
 import logging
+from tqdm import tqdm
 from .base import PipelineStage
 from ..models.base import BaseModel
 from ..prompts.templates import PromptTemplates
+import json
 
-# Basic logging setup
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
-
-
 @dataclass
 class RefinementResult:
     """Result of a single refinement iteration."""
@@ -25,18 +20,19 @@ class RefinementResult:
 
 
 class CriteriaRefinementStage(PipelineStage):
-    """
-    Pipeline stage for refining classification criteria through iterative testing.
+    """Pipeline stage for refining classification criteria through iterative testing.
     
     Overview of the simplified approach:
-      1. Randomly sample dataset captions
-      2. Test each caption against all dimensions
-      3. Attempt refinements if classification fails
-      4. Validate and apply refinements
-      5. Repeat until convergence or max rounds reached
+      1. Load unrefined criteria from configured path
+      2. Randomly sample dataset captions
+      3. Test each caption against all dimensions
+      4. Attempt refinements if classification fails
+      5. Validate and apply refinements
+      6. Repeat until convergence or max rounds reached
+      7. Save refined criteria to configured path
     
-    We omit extra dimension/attribute cleanup here because it's already done in
-    the CriteriaInitializationStage.
+    The stage loads unrefined criteria from unrefined_criteria_path and saves
+    the refined version to refined_criteria_path as JSON.
     """
     
     def __init__(self, model: BaseModel):
@@ -49,28 +45,29 @@ class CriteriaRefinementStage(PipelineStage):
         self.num_refining_rounds = self.config["stages"]["criteria_refinement"]["num_rounds"]
         self.sample_size = self.config["stages"]["criteria_refinement"]["sample_size"]
 
-    def process(self, criteria: Dict[str, Any], **kwargs) -> Dict[str, Any]:
-        """
-        Perform iterative refinement of the classification criteria based on how well
-        they classify a random sample of captions.
+    def process(self, **kwargs) -> Dict[str, Any]:
+        """Perform iterative refinement of the classification criteria.
         
-        Args:
-            criteria: A dictionary containing 'dimensions' and 'attributes'.
-                      e.g., { "dimensions": [...], "attributes": {dim: [attr1, attr2, ...]}}
+        Loads unrefined criteria from the configured unrefined_criteria_path,
+        refines them through iterative testing against caption samples, and
+        saves the refined criteria to the configured refined_criteria_path as JSON.
         
         Returns:
-            Updated criteria with any newly added attributes from refinements.
-            The returned dict has the same structure:
-                {
-                  "dimensions": [...],
-                  "attributes": {
-                      dim: [...],
-                      ...
-                  }
-                }
+            Dict containing the refined criteria with structure:
+            {
+              "dimensions": [...],
+              "attributes": {
+                  dim: [...],
+                  ...
+              }
+            }
+            Note: While this method returns the criteria, it also saves them to the
+            configured path for use by subsequent stages.
         """
-        # Load the dataset
+        # Load the dataset and unrefined criteria
         df = pd.read_parquet(self.config["dataset"]["captions_path"])
+        with open(self.config["dataset"]["unrefined_criteria_path"]) as f:
+            criteria = json.load(f)
 
         # Extract dimension -> attributes from existing criteria
         dimensions = {
@@ -79,28 +76,40 @@ class CriteriaRefinementStage(PipelineStage):
         }
         
         # Perform iterative refinement
-        for round_idx in range(self.num_refining_rounds):
+        pbar = tqdm(range(self.num_refining_rounds), desc="Refinement rounds")
+        for round_idx in pbar:
             round_captions = self._sample_captions(df)
             refinements = []
             
             # Test classification for each sample and gather refinements
-            for caption in round_captions:
+            for caption in tqdm(round_captions, desc=f"Processing captions (round {round_idx + 1})", leave=False):
                 caption_refinements = self._process_caption(caption, dimensions)
                 refinements.extend(caption_refinements)
             
             # Apply any refinements
             dimensions = self._apply_refinements(dimensions, refinements)
             
+            # Update progress bar with refinement info
+            num_applied = sum(1 for r in refinements if r.was_applied)
+            pbar.set_postfix({"applied_refinements": num_applied})
+            
             # If no refinements were applied, we assume convergence and stop
             if not any(r.was_applied for r in refinements):
+                logger.info(f"Converged after {round_idx + 1} rounds")
                 break
 
-        # Rebuild final output
-        # (Since we're not merging or removing dimensions here, no changes to 'dimensions' keys)
-        return {
+        # Build final output
+        refined_criteria = {
             "dimensions": list(dimensions.keys()),
             "attributes": dimensions
         }
+
+        # Save refined criteria
+        output_path = self.config["dataset"]["refined_criteria_path"]
+        with open(output_path, "w") as f:
+            json.dump(refined_criteria, f, indent=2)
+
+        return refined_criteria
 
     def _sample_captions(self, df: pd.DataFrame) -> List[str]:
         """
@@ -127,6 +136,7 @@ class CriteriaRefinementStage(PipelineStage):
             
             # If classification failed, try to refine
             if test_result == "Unacceptable Criteria!":
+                # Join dimension and features as criteria
                 refinement = self._refine_criteria(caption, dimension, features)
                 if refinement:
                     results.append(refinement)
@@ -148,9 +158,7 @@ class CriteriaRefinementStage(PipelineStage):
             sample=caption,
             features=features_str
         )
-        print(f"\n[TEST CLASSIFICATION] Prompt:\n{prompt}")
         result = self.models["llm"].generate(prompt)
-        print(f"[TEST CLASSIFICATION] Response:\n{result}")
         
         # The prompt expects the model to return {some_feature}
         # or {Unacceptable Criteria!}, so remove braces:
@@ -176,10 +184,7 @@ class CriteriaRefinementStage(PipelineStage):
             test_results="Unacceptable Criteria!"
         )
         
-        print(f"\n[REFINE CRITERIA] Prompt:\n{prompt}")
         refinement_response = self.models["llm"].generate(prompt)
-        print(f"[REFINE CRITERIA] Response:\n{refinement_response}")
-
         clean_response = refinement_response.strip()
         upper_response = clean_response.upper()
 
@@ -249,8 +254,5 @@ class CriteriaRefinementStage(PipelineStage):
             criteria=features_str,
             new_attribute=new_feature
         )
-        print(f"\n[VALIDATE ATTRIBUTE] Prompt:\n{prompt}")
         result = self.models["llm"].generate(prompt)
-        print(f"[VALIDATE ATTRIBUTE] Response:\n{result}")
-
         return result.strip("{}").strip().lower() == "yes"
