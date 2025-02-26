@@ -21,14 +21,12 @@ from huqu.stages.criteria_refinement import CriteriaRefinementStage
 from huqu.stages.image_assignment import ImageAssignmentStage
 from huqu.models.chatgpt import GPT4oMiniMLLM, GPT4oMiniLLM
 
-# Configure minimal logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(message)s',
     datefmt='%H:%M:%S'
 )
-# Suppress httpx logging
-logging.getLogger("httpx").setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 def run_pipeline(
