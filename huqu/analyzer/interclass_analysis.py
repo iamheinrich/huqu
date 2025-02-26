@@ -3,7 +3,7 @@ from functools import reduce
 import pandas as pd
 from IPython.display import display, HTML
 
-from huqu.combined_analyzer import BaseAnalyzer
+from huqu.analyzer.combined_analyzer import BaseAnalyzer
 
 class InterClassAnalyzer(BaseAnalyzer):
     """Analyze and compare attributes across different classes and dimensions."""

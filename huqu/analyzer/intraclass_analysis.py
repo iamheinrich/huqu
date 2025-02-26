@@ -1,11 +1,10 @@
-from dataclasses import dataclass, field
 from typing import Dict, Tuple, Optional, List, Any
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from IPython.display import display, HTML
+from IPython.display import display
 
-from huqu.combined_analyzer import BaseAnalyzer
+from huqu.analyzer.combined_analyzer import BaseAnalyzer
 
 
 class IntraClassAnalyzer(BaseAnalyzer):

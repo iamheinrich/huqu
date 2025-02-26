@@ -1,9 +1,9 @@
 from typing import Dict, Optional, Any
 import pandas as pd
 
-from huqu.interclass_analysis import InterClassAnalyzer
-from huqu.intraclass_analysis import IntraClassAnalyzer
-from huqu.combined_analyzer import AnalyzerConfig
+from huqu.analyzer.interclass_analysis import InterClassAnalyzer
+from huqu.analyzer.intraclass_analysis import IntraClassAnalyzer
+from huqu.analyzer.combined_analyzer import AnalyzerConfig
 
 
 class DataAnalyzer:
