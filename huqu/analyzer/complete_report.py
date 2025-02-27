@@ -42,9 +42,9 @@ class DataAnalyzer:
         if data_dict is not None:
             self.load_data(data_dict)
         
-        print("\nCOMPREHENSIVE WITHIN-CLASS ANALYSIS (INTRACLASS)")
+        # COMPREHENSIVE WITHIN-CLASS ANALYSIS (INTRACLASS) 
         self.intra.report()
         
-        print("\nCOMPREHENSIVE BETWEEN-CLASS ANALYSIS (INTERCLASS)")
+        # COMPREHENSIVE BETWEEN-CLASS ANALYSIS (INTERCLASS)
         self.inter.report()
         

@@ -37,7 +37,7 @@ class IntraClassAnalyzer(BaseAnalyzer):
         else:
             print("\nOutlier analysis failed.")
 
-        print("\nTip: Use get_class_outliers() or get_dimension_outliers() for detailed analysis and plot_histogram() to visualize its output.")
+        print("\nTip: Use get_class_outliers() or get_dimension_outliers() for detailed analysis and plot_histogram() to visualize its output.\n")
     
     def detect_outliers(self, over_threshold: Optional[float] = None, 
                         under_threshold: Optional[float] = None) -> Optional[pd.DataFrame]:
