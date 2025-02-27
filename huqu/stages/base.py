@@ -11,8 +11,10 @@ class PipelineStage(ABC):
     def __init__(self, models: Optional[Dict[str, BaseModel]] = None):
         """Initialize stage with required models."""
         self.models = models
-        
-        # Load config from project root
+        self._load_config()
+    
+    def _load_config(self):
+        """Load config from project root."""
         config_path = Path(__file__).parent.parent.parent / "pipeline_config.yaml"
         with open(config_path) as f:
             self.config = yaml.load(f, Loader=yaml.FullLoader)
@@ -20,4 +22,5 @@ class PipelineStage(ABC):
     @abstractmethod
     def process(self, input_data: Any, **kwargs) -> Any:
         """Process input data and return output."""
+        self._load_config()  # Reload config before each process call
         pass
